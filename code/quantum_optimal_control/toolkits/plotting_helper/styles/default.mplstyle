@@ -57,7 +57,7 @@ savefig.format: pdf
 
 # lines
 lines.antialiased: True
-lines.linewidth: 0.5
+lines.linewidth: 1
 lines.marker: o
 lines.linestyle: None
 
