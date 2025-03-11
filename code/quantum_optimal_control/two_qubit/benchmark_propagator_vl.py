@@ -22,6 +22,16 @@ from arc import Rubidium87
 from qutip import *
 from quantum_optimal_control.two_qubit.propagator_vl import PropagatorVL
 
+# set to use GPU
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+  tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
+  tf.config.experimental.set_memory_growth(gpus[0], True)
+  print(f"Using GPU: {gpus[0].name}")
+else:
+  print("No GPU found, using CPU.")
+
+
 def create_propagator_and_optimizer():
     """
     Sets up the PropagatorVL instance and Adam optimizer with a small system.
@@ -130,17 +140,21 @@ def single_optimization_step(propagator, optimizer):
 def benchmark_propagation(num_steps=10):
     """
     Creates the propagator, then runs 'num_steps' optimization steps.
-    Tracks the final cost, to ensure code is meaningfully running.
+    Tracks the final cost and time per iteration.
     """
     propagator, optimizer, _ = create_propagator_and_optimizer()
 
     best_cost = np.inf
+    times = []
     for step in range(num_steps):
+        start_time = time.time()
         current_cost = single_optimization_step(propagator, optimizer)
+        end_time = time.time()
         cost_val = current_cost.numpy()
         if cost_val < best_cost:
             best_cost = cost_val
-    return best_cost
+        times.append(end_time - start_time)
+    return best_cost, times
 
 def main():
     """
@@ -150,12 +164,15 @@ def main():
     profiler = cProfile.Profile()
     profiler.enable()
 
+    num_steps = 20
     # Run the profiling target
-    final_cost = benchmark_propagation(num_steps=20)
+    final_cost, times = benchmark_propagation(num_steps=num_steps)
 
     profiler.disable()
 
-    print(f"Final cost after 20 steps: {final_cost[0][0]:.6e}")
+    print(f"Final cost after {num_steps} steps: {final_cost[0][0]:.6e}")
+    print(f"Average time per iteration: {np.mean(times):.6f} s")
+    print(f"Iteration times: {times}")
 
     # Print out profiling stats
     s = io.StringIO()
@@ -163,6 +180,13 @@ def main():
     ps = pstats.Stats(profiler, stream=s).sort_stats(sortby)
     ps.print_stats(30)   # print top 30 lines
     print(s.getvalue())
+
+    # Write results to file
+    with open('benchmark_propagation_tf_gpu.txt', 'w') as f:
+        f.write(f"Final cost after {num_steps} steps: {final_cost[0][0]:.6e}\n")
+        f.write(f"Average time per iteration: {np.mean(times):.6f} s\n")
+        f.write(f"Iteration times: {times}\n")
+        f.write(s.getvalue())
 
 if __name__ == "__main__":
     # Suppress TF warnings to see clearer profiling output
